@@ -1,60 +1,67 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven 3.6.3' // Certifique-se de que esta versão do Maven esteja instalada no Jenkins
+        jdk 'JDK 17'
+    }
+
+    environment {
+        GIT_REPOSITORY = 'https://github.com/Gabriel-CVO/catalogoProdutos.git'
+        DOCKER_IMAGE = "catalogo-produtos:${env.BUILD_ID}"
+    }
+
     stages {
-        stage('Verificar Repositório') {
+        stage('Checkout') {
             steps {
-                bat 'git clone https://github.com/Gabriel-CVO/springboot_catalo_de_produtos.git'
+                git branch: 'main', url: "${env.GIT_REPOSITORY}"
             }
         }
 
-        stage('Instalar Dependências') {
+        stage('Build') {
+            steps {
+                bat './mvnw clean package'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                bat './mvnw test'
+            }
+        }
+
+        stage('Build Docker Image') {
             steps {
                 script {
-                    // Navegar até o diretório do projeto
-                    dir('springboot_catalo_de_produtos') {
-                        // Instalar dependências usando Maven
-                        bat 'mvn clean install'
+                    docker.build("${DOCKER_IMAGE}")
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
+                        docker.image("${DOCKER_IMAGE}").push("latest")
                     }
                 }
             }
         }
 
-        stage('Construir Imagem Docker') {
+        stage('Deploy') {
             steps {
-                script {
-                    def appName = 'springboot_catalogo_de_produtos'
-                    def imageTag = "${appName}:${env.BUILD_ID}"
-
-                    // Construir a imagem Docker (em um ambiente Windows)
-                    bat "docker build -t ${imageTag} ."
-                }
-            }
-        }
-
-        stage('Fazer Deploy') {
-            steps {
-                script {
-                    def appName = 'springboot_catalogo_de_produtos'
-                    def imageTag = "${appName}:${env.BUILD_ID}"
-
-                    // Parar e remover o container existente, se houver
-                    bat "docker stop ${appName} || exit 0"
-                    bat "docker rm ${appName} || exit 0"
-
-                    // Executar o novo container
-                    bat "docker run -d --name ${appName} -p 8090:8090 ${imageTag}"
-                }
+                echo 'Deploying application...'
+                // Adicione os comandos específicos de deploy para o ambiente Windows
             }
         }
     }
 
     post {
         success {
-            echo 'Deploy realizado com sucesso!'
+            echo 'Build and deployment completed successfully!'
         }
         failure {
-            echo 'Houve um erro durante o deploy.'
+            echo 'Build or deployment failed.'
         }
     }
 }
