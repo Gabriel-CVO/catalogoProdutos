@@ -1,67 +1,43 @@
 pipeline {
     agent any
-
-    tools {
-        maven 'Maven 3.6.3' // Certifique-se de que esta versão do Maven esteja instalada no Jenkins
-        jdk 'JDK 17'
-    }
-
-    environment {
-        GIT_REPOSITORY = 'https://github.com/Gabriel-CVO/catalogoProdutos.git'
-        DOCKER_IMAGE = "catalogo-produtos:${env.BUILD_ID}"
-    }
-
     stages {
-        stage('Checkout') {
+        stage('Verificar Repositório') {
             steps {
-                git branch: 'main', url: "${env.GIT_REPOSITORY}"
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], useRemoteConfigs:[[url: 'https://github.com/Gabriel-CVO/catalogoProdutos.git']]])
             }
         }
 
-        stage('Build') {
-            steps {
-                bat './mvnw clean package'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                bat './mvnw test'
-            }
-        }
-
-        stage('Build Docker Image') {
+        stage('Construir Imagem Docker') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}")
+                    def appName = 'av1'
+                    def imageTag = "${appName}:${env.BUILD_ID}"
+
+                    // Construir a imagem Docker
+                    bat "docker build -t ${imageTag} ."
                 }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Fazer Deploy') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
-                        docker.image("${DOCKER_IMAGE}").push("latest")
-                    }
+                    def appName = 'av1'
+                    def imageTag = "${appName}:${env.BUILD_ID}"
+                    // Parar e remover o container existente, se houver
+                    bat "docker stop ${appName} || exit 0"
+                    bat "docker rm ${appName} || exit 0"
+                    // Executar o novo container
+		    bat "docker-compose up -d --build"
                 }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo 'Deploying application...'
-                // Adicione os comandos específicos de deploy para o ambiente Windows
             }
         }
     }
-
     post {
         success {
-            echo 'Build and deployment completed successfully!'
+            echo 'Deploy realizado com sucesso!'
         }
         failure {
-            echo 'Build or deployment failed.'
+            echo 'erro durante o deploy.'
         }
-    }
 }
